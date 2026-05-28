@@ -1,0 +1,119 @@
+name: "Deploy"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'environments/**'
+      - 'modules/**'
+      - 'lambda-code/**'
+      - 'frontend/**'
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  VITE_API_URL: https://api.cloudforsushant.xyz
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infra_changed: ${{ steps.filter.outputs.infra }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            infra:
+              - 'environments/**'
+              - 'modules/**'
+              - 'lambda-code/**'
+            frontend:
+              - 'frontend/**'
+
+  terraform-apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra_changed == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: environments/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -var-file="terraform.tfvars" -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Show Outputs
+        run: terraform output
+
+  deploy-frontend:
+    needs: [detect-changes, terraform-apply]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.frontend_changed == 'true' &&
+      (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+
+      - name: Get S3 bucket from Terraform
+        working-directory: environments/dev
+        run: |
+          terraform init
+          echo "BUCKET=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_ENV
+          echo "CF_ID=$(terraform output -raw cloudfront_id)" >> $GITHUB_ENV
+
+      - name: Deploy to S3
+        working-directory: frontend
+        run: |
+          aws s3 sync dist/ "s3://${{ env.BUCKET }}" --delete
+          aws s3 cp dist/index.html "s3://${{ env.BUCKET }}/index.html" \
+            --cache-control "max-age=0,no-cache,no-store,must-revalidate" \
+            --content-type "text/html"
+
+      - name: Invalidate CloudFront
+        run: aws cloudfront create-invalidation --distribution-id "${{ env.CF_ID }}" --paths "/*"
+
+      - name: Deploy Complete
+        run: echo "✅ Frontend deployed to https://cloudforsushant.xyz"
