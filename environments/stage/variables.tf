@@ -28,6 +28,12 @@ variable "zone_id" {
   type        = string
 }
 
+variable "waf_rate_limit" {
+  description = "WAF rate limit (requests per 5 min per IP)"
+  type        = number
+  default     = 100
+}
+
 variable "tags" {
   description = "Tags for all resources"
   type        = map(string)

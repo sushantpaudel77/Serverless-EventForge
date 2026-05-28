@@ -93,6 +93,15 @@ module "api_gateway" {
   tags                  = var.tags
 }
 
+# WAF Module
+module "waf" {
+  source = "../../modules/waf"
+
+  environment = var.environment
+  rate_limit  = var.waf_rate_limit
+  tags        = var.tags
+}
+
 # Frontend Hosting Module
 module "frontend" {
   source = "../../modules/frontend-hosting"
@@ -101,15 +110,6 @@ module "frontend" {
   domain_name         = var.domain_name
   acm_certificate_arn = var.acm_certificate_arn
   zone_id             = var.zone_id
+  web_acl_arn         = module.waf.web_acl_arn
   tags                = var.tags
-}
-
-# WAF Module
-module "waf" {
-  source = "../../modules/waf"
-
-  environment     = var.environment
-  cloudfront_arn  = module.frontend.cloudfront_arn 
-  rate_limit      = var.waf_rate_limit
-  tags            = var.tags
 }

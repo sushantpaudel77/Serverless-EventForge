@@ -1,386 +1,451 @@
-# 🚀 ServerlessCore - Full-Stack Serverless Application
+# ServerlessCore
 
-![Architecture](https://img.shields.io/badge/Architecture-Serverless-blue)
-![AWS](https://img.shields.io/badge/AWS-15_Services-orange)
-![Terraform](https://img.shields.io/badge/IaC-Terraform-purple)
-![CI/CD](https://img.shields.io/badge/CI/CD-GitHub_Actions-green)
-![Security](https://img.shields.io/badge/Security-WAF_+_XSS-red)
+A production-grade, event-driven serverless CRUD application built on AWS. Features WAF protection, custom domains, SNS fan-out event processing, and a complete CI/CD pipeline managed with Terraform.
 
-A production-grade, event-driven serverless CRUD application with WAF protection, custom domains, and complete CI/CD pipeline.
+**Live endpoints:**
 
-## 🏗️ Architecture
-
-![Architecture Diagram](images/architecture.png)
-
-## 🌐 Live Demo
-
-| Endpoint     | URL                                                                            |
-| ------------ | ------------------------------------------------------------------------------ |
-| **Frontend** | [https://cloudforsushant.xyz](https://cloudforsushant.xyz)                     |
-| **API**      | [https://api.cloudforsushant.xyz/items](https://api.cloudforsushant.xyz/items) |
+| Surface  | URL                                   |
+| -------- | ------------------------------------- |
+| Frontend | https://cloudforsushant.xyz           |
+| API      | https://api.cloudforsushant.xyz/items |
 
 ---
 
-## 🏗️ Architecture
+![Architecture Diagram](images/Architecture.png)
 
-┌─────────────────────────────────────────────────────────────┐
-│ CI/CD PIPELINE │
-│ GitHub Actions → Terraform │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ FRONTEND LAYER │
-│ Route53 → CloudFront → S3 (React + Vite) │
-│ cloudforsushant.xyz │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ API LAYER │
-│ Route53 → API Gateway → Lambda (7 functions) │
-│ api.cloudforsushant.xyz │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ DATA & EVENT LAYER │
-│ DynamoDB ← Lambda → EventBridge → SQS → Lambda → SNS │
-│ ↓ │
-│ Email + SQS (fan-out) │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ SECURITY LAYER │
-│ WAF → CloudFront → OAC → Private S3 │
-│ IAM (Least Privilege) → XSS Sanitization │
-└─────────────────────────────────────────────────────────────┘
+## Architecture
 
-text
+```
+CI/CD PIPELINE
+  GitHub Actions --> Terraform Apply
+
+FRONTEND LAYER
+  Route 53 --> CloudFront (WAF + ACM) --> S3 (React + Vite)
+  cloudforsushant.xyz
+
+API LAYER
+  Route 53 --> API Gateway --> Lambda (7 functions) --> DynamoDB
+  api.cloudforsushant.xyz                           --> CloudWatch
+
+EVENT PROCESSING LAYER
+  Lambda --> EventBridge --> SQS --> Notification Lambda --> SNS Topic
+               |                         |                    |-- Email Subscribers
+               |                         |                    |-- SQS (item-processing-queue)
+               |                    On failure                        |
+               |                    SQS (DLQ)               Item Processor Lambda
+               |                                                      |
+               +------------------------------------------------------+
+                                                             DynamoDB (audit-log)
+SECURITY LAYER
+  WAF (OWASP managed rules + rate limiting)
+  CloudFront OAC (private S3, no public access)
+  IAM least-privilege roles (per-function)
+  XSS input sanitization at Lambda layer
+```
 
 ---
 
-## 📊 AWS Services Used (15)
+## AWS Services (15)
 
-| Service            | Purpose                          |
-| ------------------ | -------------------------------- |
-| **Lambda**         | Serverless compute (7 functions) |
-| **API Gateway**    | HTTP API with custom domain      |
-| **DynamoDB**       | NoSQL database (2 tables)        |
-| **EventBridge**    | Custom event bus                 |
-| **SQS**            | Message queuing (3 queues)       |
-| **SNS**            | Email notifications + fan-out    |
-| **S3**             | Frontend hosting (private)       |
-| **CloudFront**     | Global CDN with HTTPS            |
-| **Route 53**       | DNS management                   |
-| **ACM**            | SSL/TLS certificate              |
-| **WAF**            | Web Application Firewall         |
-| **IAM**            | Least-privilege roles            |
-| **CloudWatch**     | Logs & monitoring                |
-| **CloudFront OAC** | Secure S3 access                 |
+| Service        | Role                                                   |
+| -------------- | ------------------------------------------------------ |
+| Lambda         | Serverless compute — 7 functions                       |
+| API Gateway    | HTTP API with custom domain                            |
+| DynamoDB       | NoSQL storage — items table + audit-log table          |
+| EventBridge    | Custom event bus for decoupled event routing           |
+| SQS            | Message queuing — 3 queues including DLQ               |
+| SNS            | Email notifications and fan-out to subscribers         |
+| S3             | Private static frontend hosting                        |
+| CloudFront     | Global CDN with HTTPS termination                      |
+| Route 53       | DNS management for both domains                        |
+| ACM            | TLS certificate provisioned in us-east-1               |
+| WAF            | Web Application Firewall — OWASP rules + rate limiting |
+| IAM            | Least-privilege execution roles per Lambda function    |
+| CloudWatch     | Centralized logs and invocation monitoring             |
+| CloudFront OAC | Origin Access Control for private S3 access            |
 
 ---
 
-## 🚀 Quick Start
+## Prerequisites
 
-### Prerequisites
-
-````bash
-# Required tools
-- AWS CLI (configured)
+- AWS CLI configured with appropriate credentials
 - Terraform >= 1.5.0
 - Node.js >= 22
 - Git
-- AWS Account with Route53 domain
-- ACM certificate in us-east-1
-1. Clone & Setup
-bash
+- AWS account with a registered Route 53 domain
+- ACM certificate provisioned in `us-east-1`
+
+---
+
+## Deployment
+
+### 1. Clone the repository
+
+```bash
 git clone https://github.com/cloudforsushant/ServerlessCore.git
 cd ServerlessCore
-2. Configure Environment
-bash
-# Edit your environment file
+```
+
+### 2. Configure environment variables
+
+```bash
 vim environments/dev/terraform.tfvars
-hcl
-environment = "dev"
-domain_name     = "yourdomain.xyz"
-api_domain_name = "api.yourdomain.xyz"
-email_endpoint  = "your-email@gmail.com"
+```
+
+```hcl
+environment         = "dev"
+domain_name         = "yourdomain.xyz"
+api_domain_name     = "api.yourdomain.xyz"
+email_endpoint      = "your-email@gmail.com"
 acm_certificate_arn = "arn:aws:acm:us-east-1:YOUR_ACCOUNT:certificate/YOUR_CERT_ID"
-zone_id = "YOUR_ROUTE53_ZONE_ID"
-3. Deploy Infrastructure
-bash
+zone_id             = "YOUR_ROUTE53_ZONE_ID"
+```
+
+### 3. Deploy infrastructure
+
+```bash
 cd environments/dev
 
-# Initialize Terraform
 terraform init
-
-# Plan changes
-terraform plan -var-file="terraform.tfvars"
-
-# Deploy
+terraform plan  -var-file="terraform.tfvars"
 terraform apply -var-file="terraform.tfvars"
-4. Deploy Frontend
-bash
+```
+
+![Architecture Diagram](images/frontend.png)
+
+
+### 4. Build and deploy frontend
+
+```bash
 cd ../../frontend
 
-# Install dependencies
 npm install
 
-# Build with API URL
 echo "VITE_API_URL=https://api.yourdomain.xyz" > .env
 npm run build
 
-# Get S3 bucket name
 cd ../environments/dev
 BUCKET=$(terraform output -raw frontend_bucket_name)
 CF_ID=$(terraform output -raw cloudfront_id)
 
-# Upload to S3
 cd ../../frontend
 aws s3 sync dist/ "s3://${BUCKET}" --delete
 
-# Invalidate CloudFront
 aws cloudfront create-invalidation \
   --distribution-id "$CF_ID" \
   --paths "/*"
+```
 
-echo "✅ Deployed: https://yourdomain.xyz"
-📡 API Endpoints
-Test Commands
-bash
+---
+
+## API Reference
+
+Base URL: `https://api.cloudforsushant.xyz`
+
+| Method | Path        | Description       |
+| ------ | ----------- | ----------------- |
+| GET    | /items      | List all items    |
+| POST   | /items      | Create an item    |
+| GET    | /items/{id} | Get a single item |
+| PUT    | /items/{id} | Update an item    |
+| DELETE | /items/{id} | Delete an item    |
+
+### Example requests
+
+```bash
 API="https://api.cloudforsushant.xyz"
 
-# List all items
-curl $API/items
+# List items
+curl "$API/items"
 
 # Create an item
-curl -X POST $API/items \
+curl -X POST "$API/items" \
   -H "Content-Type: application/json" \
   -d '{"name":"My Item","description":"A test item"}'
 
-# Get single item
-curl $API/items/ITEM_ID
+# Get a single item
+curl "$API/items/ITEM_ID"
 
 # Update an item
-curl -X PUT $API/items/ITEM_ID \
+curl -X PUT "$API/items/ITEM_ID" \
   -H "Content-Type: application/json" \
   -d '{"name":"Updated Name"}'
 
 # Delete an item
-curl -X DELETE $API/items/ITEM_ID
-🔄 Event Flow Testing
-bash
-# 1. Create item (triggers full event chain)
+curl -X DELETE "$API/items/ITEM_ID"
+```
+
+---
+
+## Event Flow Verification
+
+Creating an item triggers the full event chain: EventBridge -> SQS -> Notification Lambda -> SNS (email + fan-out) -> Item Processor Lambda -> DynamoDB audit-log.
+
+```bash
+# 1. Trigger the chain
 curl -X POST https://api.cloudforsushant.xyz/items \
   -H "Content-Type: application/json" \
-  -d '{"name":"Event Test","description":"Testing events"}'
+  -d '{"name":"Event Test","description":"Testing event chain"}'
 
-# 2. Check email for notification
-# 3. Check DynamoDB audit table
+# 2. Confirm email notification received
+
+# 3. Verify audit log entry
 aws dynamodb scan --table-name dev-audit-log --max-items 5
 
-# 4. Check Lambda logs
-aws logs tail /aws/lambda/dev-create-item --since 5m
-aws logs tail /aws/lambda/dev-notification-processor --since 5m
-aws logs tail /aws/lambda/dev-item-processor --since 5m
-🛡️ Security Testing
-WAF Protection
-bash
-# Test XSS (sanitized by Lambda, blocked by WAF)
-curl -X POST https://api.cloudforsushant.xyz/items \
-  -H "Content-Type: application/json" \
-  -d '{"name":"<script>alert(1)</script>"}'
+# 4. Inspect Lambda logs
+aws logs tail /aws/lambda/dev-create-item             --since 5m
+aws logs tail /aws/lambda/dev-notification-processor  --since 5m
+aws logs tail /aws/lambda/dev-item-processor          --since 5m
+```
 
-# Test SQL Injection (blocked by WAF)
-curl "https://api.cloudforsushant.xyz/items?id=1'+OR+'1'='1"
+---
 
-# Test Rate Limiting
-for i in $(seq 1 500); do
-  curl -s -o /dev/null -w "%{http_code}\n" https://cloudforsushant.xyz &
+## Security Testing
+
+### WAF stress test
+
+The following script tests rate limiting, SQL injection blocking, and XSS blocking in parallel. No emojis, no fluff — just results.
+
+```bash
+#!/bin/bash
+
+RESULTS_FILE="/tmp/waf-test-results.txt"
+> "$RESULTS_FILE"
+
+echo "================================================================"
+echo "  WAF STRESS TEST"
+echo "  Target: https://api.cloudforsushant.xyz"
+echo "================================================================"
+
+# --- Rate Limit ---
+echo ""
+echo "[1/3] Rate limit test  (300 concurrent requests)..."
+for i in $(seq 1 300); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    https://api.cloudforsushant.xyz/items >> "$RESULTS_FILE" &
 done
+wait
 
-# View WAF Logs
+# --- SQL Injection ---
+echo "[2/3] SQL injection test  (50 concurrent requests)..."
+for i in $(seq 1 50); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    "https://api.cloudforsushant.xyz/items?id=1'+OR+'1'='1" >> "$RESULTS_FILE" &
+done
+wait
+
+# --- XSS ---
+echo "[3/3] XSS test  (50 concurrent requests)..."
+for i in $(seq 1 50); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST https://api.cloudforsushant.xyz/items \
+    -H "Content-Type: application/json" \
+    -d '{"name":"<script>alert(1)</script>"}' >> "$RESULTS_FILE" &
+done
+wait
+
+# --- Results ---
+TOTAL=$(wc -l < "$RESULTS_FILE")
+ALLOWED=$(grep -c '200' "$RESULTS_FILE")
+BLOCKED=$(grep -c '403' "$RESULTS_FILE")
+BLOCK_RATE=$(echo "scale=2; $BLOCKED * 100 / $TOTAL" | bc)
+
+echo ""
+echo "================================================================"
+echo "  RESULTS"
+echo "================================================================"
+echo "  Total requests : $TOTAL"
+echo "  200 Allowed    : $ALLOWED"
+echo "  403 Blocked    : $BLOCKED"
+echo "  Block rate     : ${BLOCK_RATE}%"
+echo "================================================================"
+```
+
+### View WAF logs
+
+```bash
 aws logs tail "aws-waf-logs-dev" --since 1h | grep BLOCK
-📊 Monitoring & Debugging
-bash
-# View all Lambda logs
-aws logs tail /aws/lambda/dev-get-items --since 10m
-aws logs tail /aws/lambda/dev-create-item --since 10m
+```
+
+---
+
+## Monitoring
+
+```bash
+# Lambda logs
+aws logs tail /aws/lambda/dev-get-items              --since 10m
+aws logs tail /aws/lambda/dev-create-item            --since 10m
 aws logs tail /aws/lambda/dev-notification-processor --since 10m
 
-# Check SQS queues
+# SQS queue state
 aws sqs get-queue-attributes \
-  --queue-url "https://sqs.us-east-1.amazonaws.com/YOUR-ACCOUNT-ID/dev-events-queue" \
+  --queue-url "https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/dev-events-queue" \
   --attribute-names All
 
-# Check DynamoDB
+# DynamoDB tables
 aws dynamodb scan --table-name dev-items-table
 aws dynamodb scan --table-name dev-audit-log
 
-# Check SNS subscriptions
+# SNS subscriptions
 aws sns list-subscriptions-by-topic \
-  --topic-arn "arn:aws:sns:us-east-1:YOUR-ACCOUNT-ID:dev-notification-topic"
+  --topic-arn "arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:dev-notification-topic"
 
-# Check Lambda triggers
-aws lambda list-event-source-mappings --function-name dev-notification-processor
-🏗️ Terraform Commands
-bash
-# Navigate to environment
+# Lambda event source mappings
+aws lambda list-event-source-mappings \
+  --function-name dev-notification-processor
+```
+
+---
+
+## Terraform Reference
+
+```bash
 cd environments/dev
 
-# Initialize
 terraform init
-
-# Validate
 terraform validate
-
-# Plan
-terraform plan -var-file="terraform.tfvars"
-
-# Apply
-terraform apply -var-file="terraform.tfvars"
-
-# Show outputs
+terraform plan    -var-file="terraform.tfvars"
+terraform apply   -var-file="terraform.tfvars"
 terraform output
-
-# Show state
 terraform state list
+terraform destroy -var-file="terraform.tfvars"   # destructive
+```
 
-# Destroy (caution!)
-terraform destroy -var-file="terraform.tfvars"
-🔄 CI/CD Pipeline
-GitHub Actions Workflows
-bash
-# On PR: Terraform Plan (shows changes)
-# On Merge to main: Terraform Apply (deploys infra)
-# On Frontend changes: Build → S3 Upload → CloudFront Invalidate
+---
 
-# Manual trigger
+## CI/CD Pipeline
+
+Three GitHub Actions workflows are configured:
+
+| Trigger              | Workflow             | Action                                                |
+| -------------------- | -------------------- | ----------------------------------------------------- |
+| Pull request         | `terraform-plan.yml` | Runs `terraform plan` and posts diff as PR comment    |
+| Merge to main        | `deploy.yml`         | Runs `terraform apply` to deploy infrastructure       |
+| Frontend file change | `deploy.yml`         | Builds React app, syncs to S3, invalidates CloudFront |
+
+```bash
+# Trigger manually
 gh workflow run "Terraform Apply"
 gh workflow run "Deploy Frontend"
 
-# View runs
+# Monitor runs
 gh run list --limit 10
-
-# Watch run
 gh run watch <RUN_ID>
-📁 Project Structure
-text
+```
+
+---
+
+## Project Structure
+
+```
 ServerlessCore/
-├── .github/workflows/
-│   ├── terraform-plan.yml       # PR checks
-│   ├── terraform-apply.yml      # Deploy on merge
-│   ├── environments/
-│   ├── dev/                     # Development
+├── .github/
+│   └── workflows/
+│       ├── deploy.yml
+│       └── terraform-plan.yml
+├── environments/
+│   ├── dev/
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── terraform.tfvars
 │   │   └── outputs.tf
-│   └── prod/                    # Production (future)
+│   └── prod/                     # Planned
 ├── modules/
-│   ├── dynamodb/                # Database
-│   ├── iam/                     # Permissions
-│   ├── lambda/                  # Compute
-│   ├── api-gateway/             # API
-│   ├── eventbridge/             # Events
-│   ├── sqs/                     # Queues
-│   ├── sns/                     # Notifications
-│   ├── frontend-hosting/        # CDN + S3
-│   └── waf/                     # Firewall
-├── lambda-code/                 # Function code
-│   ├── get-items/
-│   ├── get-item/
+│   ├── api-gateway/
+│   ├── dynamodb/
+│   ├── eventbridge/
+│   ├── frontend-hosting/
+│   ├── iam/
+│   ├── lambda/
+│   ├── sns/
+│   ├── sqs/
+│   └── waf/
+├── lambda-code/
 │   ├── create-item/
-│   ├── update-item/
 │   ├── delete-item/
+│   ├── get-item/
+│   ├── get-items/
+│   ├── item-processor/
 │   ├── notification-processor/
-│   └── item-processor/
-├── frontend/                    # React app
+│   └── update-item/
+├── frontend/
 │   ├── src/
 │   ├── public/
 │   └── dist/
-└── scripts/                     # Utility scripts
-🔐 Security Features
-Feature	Implementation
-HTTPS Only	CloudFront + ACM
-XSS Protection	Lambda sanitization + WAF
-SQL Injection	WAF managed rules
-DDoS Protection	WAF rate limiting (2000/5min)
-Least Privilege	7 IAM roles, per-function permissions
-Private Storage	S3 with OAC, no public access
-Message Reliability	DLQ with 3 retries
-Input Validation	Lambda sanitization layer
-Log Redaction	WAF headers redacted
-💰 Cost Estimate
-Service	Monthly Cost
-Lambda	Free tier (1M requests)
-API Gateway	Free tier (1M requests)
-DynamoDB	Free tier (25GB)
-CloudFront	Free tier (1TB)
-S3	~$0.01
-SQS	Free tier (1M requests)
-SNS	Free tier (1M publishes)
-WAF	~$8/month
-Route 53	$0.50/month
-Total	~$9/month
-🛠️ Troubleshooting
-Email not receiving
-bash
-# Check SNS subscription
-aws sns list-subscriptions-by-topic --topic-arn "YOUR_SNS_ARN"
+└── scripts/
+```
 
-# Check if subscription is confirmed
-# If PendingConfirmation, check spam folder
-Lambda not triggering
-bash
-# Check event source mapping
+---
+
+## Security Features
+
+| Control              | Implementation                                   |
+| -------------------- | ------------------------------------------------ |
+| Transport security   | CloudFront + ACM — HTTPS only                    |
+| XSS prevention       | Lambda input sanitization + WAF managed rules    |
+| SQL injection        | WAF OWASP managed rule group                     |
+| DDoS / rate limiting | WAF rate limit — 2000 requests per 5 minutes     |
+| Least privilege      | 7 IAM roles, one per Lambda function             |
+| Private storage      | S3 with CloudFront OAC — no public bucket access |
+| Message reliability  | Dead-letter queue with 3 retry attempts          |
+| Input validation     | Sanitization layer inside each Lambda handler    |
+| Log hygiene          | WAF request headers redacted in logs             |
+
+---
+
+## Cost Estimate
+
+| Service     | Monthly estimate          |
+| ----------- | ------------------------- |
+| Lambda      | Free tier (1M requests)   |
+| API Gateway | Free tier (1M requests)   |
+| DynamoDB    | Free tier (25 GB)         |
+| CloudFront  | Free tier (1 TB transfer) |
+| S3          | ~$0.01                    |
+| SQS         | Free tier (1M requests)   |
+| SNS         | Free tier (1M publishes)  |
+| WAF         | ~$8.00                    |
+| Route 53    | $0.50                     |
+| **Total**   | **~$9/month**             |
+
+---
+
+## Troubleshooting
+
+**Email notifications not arriving**
+
+```bash
+# Check subscription status
+aws sns list-subscriptions-by-topic --topic-arn "YOUR_SNS_ARN"
+# If status is PendingConfirmation, check spam folder for the AWS confirmation email
+```
+
+**Lambda not processing SQS messages**
+
+```bash
+# Check event source mapping status
 aws lambda list-event-source-mappings --function-name dev-notification-processor
 
-# Enable if disabled
+# Re-enable if disabled
 aws lambda update-event-source-mapping --uuid UUID --enabled
-SQS messages stuck
-bash
-# Check queue attributes
-aws sqs get-queue-attributes --queue-url "QUEUE_URL" --attribute-names All
+```
 
-# Check DLQ
-aws sqs receive-message --queue-url "DLQ_URL" --max-number-of-messages 10
-🎯 Features
-✅ Full CRUD operations
+**Messages accumulating in SQS**
 
-✅ Custom domains with HTTPS
+```bash
+# Inspect queue attributes
+aws sqs get-queue-attributes \
+  --queue-url "QUEUE_URL" \
+  --attribute-names All
 
-✅ Event-driven architecture
+# Read from DLQ
+aws sqs receive-message \
+  --queue-url "DLQ_URL" \
+  --max-number-of-messages 10
+```
 
-✅ Email notifications on all actions
+---
 
-✅ Audit logging in DynamoDB
+## License
 
-✅ WAF protection (OWASP Top 10)
-
-✅ XSS sanitization
-
-✅ Rate limiting
-
-✅ Dead letter queues
-
-✅ Infrastructure as Code
-
-✅ CI/CD with GitHub Actions
-
-✅ Multi-environment ready
-
-✅ Private S3 with OAC
-
-✅ CloudFront CDN
-
-✅ SNS fan-out pattern
-
-✅ Least privilege IAM
-
-📝 License
-MIT License - Feel free to use this for your own projects!
-
-🙏 Acknowledgments
-Built with ❤️ using AWS serverless services and Terraform.
-
-⭐ If you like this project, give it a star on GitHub!
-
+MIT License. Free to use, fork, and adapt.

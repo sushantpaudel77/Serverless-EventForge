@@ -90,7 +90,7 @@ export default function App() {
 
   /* render  */
   return (
-    <div className="relative min-h-screen bg-gradient-to-tr from-zinc-950 via-blue-700 to-indigo-500/20 text-white overflow-x-hidden">
+    <div className="relative min-h-screen bg-gradient-to-tr from-zinc-950 via-blue-600 to-indigo-200/70 text-white overflow-x-hidden">
       {/* Grain texture */}
       <div
         style={{
