@@ -40,6 +40,9 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.infra_changed == 'true'
     runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     defaults:
       run:
         working-directory: environments/dev
@@ -72,6 +75,9 @@ jobs:
       needs.detect-changes.outputs.frontend_changed == 'true' &&
       (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     steps:
       - name: Checkout
@@ -95,7 +101,7 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          VITE_API_URL: ${{ env.VITE_API_URL }}
+          VITE_API_URL: https://api.cloudforsushant.xyz
 
       - name: Get S3 bucket from Terraform
         working-directory: environments/dev
