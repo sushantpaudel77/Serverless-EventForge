@@ -6,7 +6,7 @@ variable "environment" {
 variable "rate_limit" {
   description = "Rate limit (requests per 5 minutes per IP)"
   type        = number
-  default     = 2000
+  default     = 100
 }
 
 variable "tags" {
