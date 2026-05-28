@@ -16,4 +16,4 @@ tags = {
   ManagedBy   = "terraform"
 }
 
-waf_rate_limit = 100
+waf_rate_limit = 10
