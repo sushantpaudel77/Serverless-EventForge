@@ -268,8 +268,7 @@ ServerlessCore/
 ├── .github/workflows/
 │   ├── terraform-plan.yml       # PR checks
 │   ├── terraform-apply.yml      # Deploy on merge
-│   └── deploy-frontend.yml      # Frontend deploy
-├── environments/
+│   ├── environments/
 │   ├── dev/                     # Development
 │   │   ├── main.tf
 │   │   ├── variables.tf

@@ -94,7 +94,7 @@ export default function App() {
       {/* Grain texture */}
       <div
         style={{
-          backgroundImage: 'url(/grain.svg)',
+          // backgroundImage: 'url(/grain.svg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           mixBlendMode: 'overlay',

@@ -32,7 +32,7 @@ export const handler = async (event) => {
         Item: marshall(auditRecord)
       }));
       
-      console.log(`Audit record created for item: ${itemData.itemId}`);
+      // console.log(`Audit record created for item: ${itemData.itemId}`);
     } catch (error) {
       console.error("Failed to process message:", error);
       failures.push({ itemIdentifier: record.messageId });
