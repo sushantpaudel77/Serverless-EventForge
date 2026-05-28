@@ -31,7 +31,7 @@ variable "zone_id" {
 variable "waf_rate_limit" {
   description = "WAF rate limit (requests per 5 min per IP)"
   type        = number
-  default     = 2000
+  default     = 100
 }
 
 variable "tags" {
