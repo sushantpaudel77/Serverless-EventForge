@@ -2,7 +2,7 @@ name: "Terraform Plan"
 
 on:
   pull_request:
-    branches: [main]
+    branches: [feature]
     paths:
       - 'environments/**'
       - 'modules/**'
